@@ -56,20 +56,16 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 
-rsv6.img: bootblock
+RUST_SOURCE_FILES=$(shell find src)
+
+rsv6.img: bootblock Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
 	cargo xbuild --release --target i386-os.json
 	dd if=/dev/zero of=rsv6.img count=10000
 	dd if=bootblock of=rsv6.img conv=notrunc
 	dd if=$(KERNEL) of=rsv6.img seek=1 conv=notrunc
 
-bootblock: bootasm.S bootmain.c
-	$(CC) $(CFLAGS) -fno-pic -O -nostdinc -I. -c bootmain.c
-	$(CC) $(CFLAGS) -fno-pic -nostdinc -I. -c bootasm.S
-	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o bootmain.o
-	$(OBJDUMP) -S bootblock.o > bootblock.asm
-	$(OBJCOPY) -S -O binary -j .text bootblock.o bootblock
-	./sign.pl bootblock
-
+bootblock: bootasm.S
+	nasm -f bin bootasm.S -o bootblock
 
 # kernelmemfs is a copy of kernel that maintains the
 # disk image in memory instead of writing to a disk.
@@ -123,7 +119,7 @@ qemu-nox: rsv6.img
 .gdbinit: .gdbinit.tmpl
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
-qemu-gdb: fs.img rsv6.img .gdbinit
+qemu-gdb: rsv6.img .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -serial mon:stdio $(QEMUOPTS) -S $(QEMUGDB)
 

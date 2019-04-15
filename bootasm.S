@@ -1,88 +1,94 @@
-#include "asm.h"
-#include "memlayout.h"
-#include "mmu.h"
+org 0x7c00 ; tell NASM to start outputting stuff at offset 0x7c00
 
-# Start the first CPU: switch to 32-bit protected mode, jump into C.
-# The BIOS loads this code from the first sector of the hard disk into
-# memory at physical address 0x7c00 and starts executing in real mode
-# with %cs=0 %ip=7c00.
-
-.code16                       # Assemble for 16-bit mode
-.globl start
+bits 16 ; tell NASM this is 16 bit code
 start:
-  cli                         # BIOS enabled interrupts; disable
+  ; disable interrupts, who knows what the BIOS did
+  cli
+  ; clear ax, ds (data segment), es (extra segment), ss (stack segment)
+  xor    ax, ax
+  mov    ds, ax
+  mov    es, ax
+  mov    ss, ax
 
-  # Zero data segment registers DS, ES, and SS.
-  xorw    %ax,%ax             # Set %ax to zero
-  movw    %ax,%ds             # -> Data Segment
-  movw    %ax,%es             # -> Extra Segment
-  movw    %ax,%ss             # -> Stack Segment
-
-  # Physical address line A20 is tied to zero so that the first PCs 
-  # with 2 MB would run software that assumed 1 MB.  Undo that.
+  ; enable A20
 seta20.1:
-  inb     $0x64,%al               # Wait for not busy
-  testb   $0x2,%al
-  jnz     seta20.1
+  in     al,0x64               ; Wait for not busy
+  test   al,0x2
+  jnz    seta20.1
 
-  movb    $0xd1,%al               # 0xd1 -> port 0x64
-  outb    %al,$0x64
-
+  mov    al,0xd1               ; 0xd1 -> port 0x64
+  out    0x64,al
 seta20.2:
-  inb     $0x64,%al               # Wait for not busy
-  testb   $0x2,%al
-  jnz     seta20.2
+  in     al,0x64               ; Wait for not busy
+  test   al,0x2
+  jnz    seta20.2
+  mov    al,0xdf               ; 0xdf -> port 0x60
+  out    0x60,al
 
-  movb    $0xdf,%al               # 0xdf -> port 0x60
-  outb    %al,$0x60
+  ; setup a temp gdt
+setgdt:
+  lgdt   [gdt_pointer]
 
-  # Switch from real to protected mode.  Use a bootstrap GDT that makes
-  # virtual addresses map directly to physical addresses so that the
-  # effective memory map doesn't change during the transition.
-  lgdt    gdtdesc
-  movl    %cr0, %eax
-  orl     $CR0_PE, %eax
-  movl    %eax, %cr0
+  ; enter protected mode! (not 32 bit yet)
+  mov   eax, cr0
+  or    eax, 1    ; Set the protected mode bit
+  mov   cr0, eax
 
-//PAGEBREAK!
-  # Complete the transition to 32-bit protected mode by using a long jmp
-  # to reload %cs and %eip.  The segment descriptors are set up with no
-  # translation, so that the mapping is still the identity mapping.
-  ljmp    $(SEG_KCODE<<3), $start32
+  ; ljmp into 32 bit mode!
+  jmp  8:start32 ; this sets cs to 0x1000 (where rsv6 is loaded)
 
-.code32  # Tell assembler to generate 32-bit code now.
+bits 32  ; we 32 bit now
 start32:
-  # Set up the protected-mode data segment registers
-  movw    $(SEG_KDATA<<3), %ax    # Our data segment selector
-  movw    %ax, %ds                # -> DS: Data Segment
-  movw    %ax, %es                # -> ES: Extra Segment
-  movw    %ax, %ss                # -> SS: Stack Segment
-  movw    $0, %ax                 # Zero segments not ready for use
-  movw    %ax, %fs                # -> FS
-  movw    %ax, %gs                # -> GS
+  ; setup segmentation registers, im copying how xv6 does it
+  ; we'll have to change this based on where we put certain things in linking,
+  ; etc
+  ; Set up the protected-mode data segment registers
+  hlt
+  mov    ax, 0x10000
+  mov    ds, ax
+  mov    es, ax
+  mov    ss, ax
+  mov    ax, 0
+  mov    fs, ax                ; set fs to 0
+  mov    gs, ax                ; set fs to 0
 
-  # Set up the stack pointer and call into C.
-  movl    $start, %esp
-  call    bootmain
+  mov    esp, start  ; set the stack pointer to be before the bootloader,
+                     ; this grows down
 
-  # If bootmain returns (it shouldn't), trigger a Bochs
-  # breakpoint if running under Bochs, then loop.
-  movw    $0x8a00, %ax            # 0x8a00 -> port 0x8a00
-  movw    %ax, %dx
-  outw    %ax, %dx
-  movw    $0x8ae0, %ax            # 0x8ae0 -> port 0x8a00
-  outw    %ax, %dx
-spin:
-  jmp     spin
+align 4
+gdt_null:
+  ; all zeroes, that's just how this is
+  dq 0x0
+gdt_code:
+  ; segment limit
+  dw 0xffff
+  ; segment base
+  dw 0x0
+  ; base high bits
+  db 0x0
+  ; access flags, sets rw, executable, ring 0, and present bits
+  db 10011010b
+  ; flags and 4 limit high bits (low bits of the byte)
+  ; flags set granularity to 4KiB (limit is in 4KiB rather than B)
+  db 11001111b
+  ; more base high bits
+  db 0x0
+gdt_data:
+  dw 0xffff
+  dw 0x0
+  ; base high bits
+  db 0x0
+  ; access flags, sets rw, ring 0, and present bits
+  db 10010010b
+  ; flags and 4 limit high bits (low bits of the byte)
+  ; flags set granularity to 4KiB (limit is in 4KiB rather than B)
+  db 11001111b
+  ; more base high bits
+  db 0x0
 
-# Bootstrap GDT
-.p2align 2                                # force 4 byte alignment
-gdt:
-  SEG_NULLASM                             # null seg
-  SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)   # code seg
-  SEG_ASM(STA_W, 0x0, 0xffffffff)         # data seg
+gdt_pointer:
+    dw 0x17 ; gdt is 24B, then we subtract 1
+    dd gdt_null ; gdt start
 
-gdtdesc:
-  .word   (gdtdesc - gdt - 1)             # sizeof(gdt) - 1
-  .long   gdt                             # address gdt
-
+times 510 - ($-$$) db 0 ; pad remaining 510 bytes with zeroes
+dw 0xaa55 ; magic bootloader magic - marks this 512 byte sector bootable!
