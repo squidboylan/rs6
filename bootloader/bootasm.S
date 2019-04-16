@@ -1,6 +1,5 @@
-org 0x7c00 ; tell NASM to start outputting stuff at offset 0x7c00
-
 bits 16 ; tell NASM this is 16 bit code
+global start
 start:
   ; disable interrupts, who knows what the BIOS did
   cli
@@ -44,7 +43,7 @@ start32:
   ; etc
   ; Set up the protected-mode data segment registers
   hlt
-  mov    ax, 0x10000
+  mov    ax, 0x10
   mov    ds, ax
   mov    es, ax
   mov    ss, ax
@@ -54,6 +53,8 @@ start32:
 
   mov    esp, start  ; set the stack pointer to be before the bootloader,
                      ; this grows down
+  extern bootmain
+  call   bootmain
 
 align 4
 gdt_null:
@@ -89,6 +90,3 @@ gdt_data:
 gdt_pointer:
     dw 0x17 ; gdt is 24B, then we subtract 1
     dd gdt_null ; gdt start
-
-times 510 - ($-$$) db 0 ; pad remaining 510 bytes with zeroes
-dw 0xaa55 ; magic bootloader magic - marks this 512 byte sector bootable!

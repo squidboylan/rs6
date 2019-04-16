@@ -1,16 +1,6 @@
-[package]
-name = "rsv6"
-version = "0.1.0"
-authors = ["Caleb Boylan <calebboylan@gmail.com>"]
-edition = "2018"
+[workspace]
 
-[lib]
-crate-type = ["staticlib"]
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
-
-[dependencies]
+members = [
+    "kernel",
+    "bootloader",
+]

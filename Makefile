@@ -14,7 +14,7 @@ TOOLPREFIX := $(shell if i386-jos-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/d
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-KERNEL = target/i386-os/release/librsv6.a
+KERNEL=target/i386-os/release/libkernel.a
 
 # If the makefile can't find QEMU, specify its path here
 # QEMU = qemu-system-i386
@@ -56,16 +56,24 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 
-RUST_SOURCE_FILES=$(shell find src)
+RUST_SOURCE_FILES=$(shell find kernel/src)
 
-rsv6.img: bootblock Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
-	cargo xbuild --release --target i386-os.json
+rsv6.img: bootblock Cargo.toml kernel/Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
+	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p kernel
 	dd if=/dev/zero of=rsv6.img count=10000
 	dd if=bootblock of=rsv6.img conv=notrunc
 	dd if=$(KERNEL) of=rsv6.img seek=1 conv=notrunc
 
-bootblock: bootasm.S
-	nasm -f bin bootasm.S -o bootblock
+BOOT_SOURCE_FILES=$(shell find bootloader/src)
+BOOTLOADER=target/i386-os/release/libbootloader.a
+
+bootblock: bootloader/bootasm.S $(BOOT_SOURCE_FILES)
+	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p bootloader
+	nasm -f elf32 bootloader/bootasm.S -o bootasm.o
+	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o $(BOOTLOADER)
+	$(OBJDUMP) -S bootblock.o > bootblock.asm
+	$(OBJCOPY) -S -O binary -j .text bootblock.o bootblock
+	./sign.sh
 
 # kernelmemfs is a copy of kernel that maintains the
 # disk image in memory instead of writing to a disk.
@@ -85,7 +93,7 @@ ULIB = ulib.o usys.o printf.o umalloc.o
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
-	initcode initcode.out kernel rsv6.img fs.img kernelmemfs \
+	initcode initcode.out rsv6.img fs.img kernelmemfs \
 	rsv6memfs.img mkfs .gdbinit \
 	cargo clean
 	$(UPROGS)
