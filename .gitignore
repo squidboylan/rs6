@@ -5,3 +5,5 @@ bootblock
 *.o
 *.asm
 *.swp
+kernel_bin
+kernel_bin.sym

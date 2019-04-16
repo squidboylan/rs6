@@ -109,7 +109,7 @@ pub extern "C" fn bootmain() {
                 *i = 0;
             }
         }
-
+        prog_entry += 1;
     }
 
     // Cast the entry point to a C function pointer

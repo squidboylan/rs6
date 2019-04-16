@@ -42,7 +42,6 @@ start32:
   ; we'll have to change this based on where we put certain things in linking,
   ; etc
   ; Set up the protected-mode data segment registers
-  hlt
   mov    ax, 0x10
   mov    ds, ax
   mov    es, ax

@@ -58,11 +58,17 @@ endif
 
 RUST_SOURCE_FILES=$(shell find kernel/src)
 
-rsv6.img: bootblock Cargo.toml kernel/Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
-	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p kernel
+rsv6.img: bootblock Cargo.toml kernel_bin
 	dd if=/dev/zero of=rsv6.img count=10000
 	dd if=bootblock of=rsv6.img conv=notrunc
-	dd if=$(KERNEL) of=rsv6.img seek=1 conv=notrunc
+	dd if=kernel_bin of=rsv6.img seek=1 conv=notrunc
+
+kernel_bin: kernel/Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
+	nasm -f elf32 kernel/entry.S -o entry.o
+	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p kernel
+	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL) -b binary
+	$(OBJDUMP) -S kernel_bin > kernel_bin.asm
+	$(OBJDUMP) -t kernel_bin | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel_bin.sym
 
 BOOT_SOURCE_FILES=$(shell find bootloader/src)
 BOOTLOADER=target/i386-os/release/libbootloader.a
@@ -93,7 +99,7 @@ ULIB = ulib.o usys.o printf.o umalloc.o
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
-	initcode initcode.out rsv6.img fs.img kernelmemfs \
+	initcode initcode.out rsv6.img kernel_bin fs.img kernelmemfs \
 	rsv6memfs.img mkfs .gdbinit \
 	cargo clean
 	$(UPROGS)
