@@ -1,3 +1,6 @@
+# This file is derived from the xv6 Makefile see xv6-LICENSE for a copy of
+# the license and copyright info
+
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
 TOOLPREFIX := $(shell if i386-jos-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
@@ -72,11 +75,7 @@ bootblock: bootloader/bootasm.S $(BOOT_SOURCE_FILES)
 .PRECIOUS: %.o
 
 clean:
-	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
-	*.o *.d *.asm *.sym vectors.S bootblock entryother \
-	initcode initcode.out rsv6.img kernel_bin fs.img kernelmemfs \
-	rsv6memfs.img mkfs .gdbinit \
-	$(UPROGS)
+	rm -f *.o *.d *.asm *.sym bootblock entryother rsv6.img kernel_bin .gdbinit
 	cargo clean
 
 # try to generate a unique GDB port
