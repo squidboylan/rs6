@@ -14,8 +14,6 @@ TOOLPREFIX := $(shell if i386-jos-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/d
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-KERNEL=target/i386-os/release/libkernel.a
-
 # If the makefile can't find QEMU, specify its path here
 # QEMU = qemu-system-i386
 
@@ -42,73 +40,44 @@ AS = $(TOOLPREFIX)gas
 LD = $(TOOLPREFIX)ld
 OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
-CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
-CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
-ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
 # FreeBSD ld wants ``elf_i386_fbsd''
 LDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)
 
-# Disable PIE when possible (for Ubuntu 16.10 toolchain)
-ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
-CFLAGS += -fno-pie -no-pie
-endif
-ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
-CFLAGS += -fno-pie -nopie
-endif
-
-RUST_SOURCE_FILES=$(shell find kernel/src)
+KERNEL_SOURCE_FILES=$(shell find kernel/src)
+KERNEL_LIB=target/i386-os/release/libkernel.a
 
 rsv6.img: bootblock Cargo.toml kernel_bin
 	dd if=/dev/zero of=rsv6.img count=10000
 	dd if=bootblock of=rsv6.img conv=notrunc
 	dd if=kernel_bin of=rsv6.img seek=1 conv=notrunc
 
-kernel_bin: kernel/Cargo.toml i386-os.json $(RUST_SOURCE_FILES)
+kernel_bin: kernel/Cargo.toml kernel/entry.S i386-os.json $(KERNEL_SOURCE_FILES)
 	nasm -f elf32 kernel/entry.S -o entry.o
 	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p kernel
-	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL) -b binary
+	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL_LIB) -b binary
 	$(OBJDUMP) -S kernel_bin > kernel_bin.asm
 	$(OBJDUMP) -t kernel_bin | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel_bin.sym
 
 BOOT_SOURCE_FILES=$(shell find bootloader/src)
-BOOTLOADER=target/i386-os/release/libbootloader.a
+BOOTLOADER_LIB=target/i386-os/release/libbootloader.a
 
 bootblock: bootloader/bootasm.S $(BOOT_SOURCE_FILES)
 	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p bootloader
 	nasm -f elf32 bootloader/bootasm.S -o bootasm.o
-	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o $(BOOTLOADER)
+	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o $(BOOTLOADER_LIB)
 	$(OBJDUMP) -S bootblock.o > bootblock.asm
 	$(OBJCOPY) -S -O binary -j .text bootblock.o bootblock
 	./sign.sh
 
-# kernelmemfs is a copy of kernel that maintains the
-# disk image in memory instead of writing to a disk.
-# This is not so useful for testing persistent storage or
-# exploring disk buffering implementations, but it is
-# great for testing the kernel on real hardware without
-# needing a scratch disk.
-MEMFSOBJS = $(filter-out ide.o,$(OBJS)) memide.o
-
-ULIB = ulib.o usys.o printf.o umalloc.o
-# Prevent deletion of intermediate files, e.g. cat.o, after first build, so
-# that disk image changes after first build are persistent until clean.  More
-# details:
-# http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
 .PRECIOUS: %.o
 
-clean: 
+clean:
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
 	initcode initcode.out rsv6.img kernel_bin fs.img kernelmemfs \
 	rsv6memfs.img mkfs .gdbinit \
-	cargo clean
 	$(UPROGS)
-
-# run in emulators
-
-bochs : fs.img rsv6.img
-	if [ ! -e .bochsrc ]; then ln -s dot-bochsrc .bochsrc; fi
-	bochs -q
+	cargo clean
 
 # try to generate a unique GDB port
 GDBPORT = $(shell expr `id -u` % 5000 + 25000)
@@ -124,9 +93,6 @@ QEMUOPTS = -drive file=rsv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 51
 qemu: rsv6.img
 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
 
-qemu-memfs: rsv6memfs.img
-	$(QEMU) -drive file=rsv6memfs.img,index=0,media=disk,format=raw -smp $(CPUS) -m 256
-
 qemu-nox: rsv6.img
 	$(QEMU) -nographic $(QEMUOPTS)
 
@@ -137,14 +103,6 @@ qemu-gdb: rsv6.img .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -serial mon:stdio $(QEMUOPTS) -S $(QEMUGDB)
 
-qemu-nox-gdb: fs.img rsv6.img .gdbinit
+qemu-nox-gdb: rsv6.img .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -nographic $(QEMUOPTS) -S $(QEMUGDB)
-
-# CUT HERE
-# prepare dist for students
-# after running make dist, probably want to
-# rename it to rev0 or rev1 or so on and then
-# check in that version.
-
-.PHONY: dist-test dist
