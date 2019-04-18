@@ -92,6 +92,9 @@ QEMUOPTS = -drive file=rsv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 51
 qemu: rsv6.img
 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
 
+qemu-curses: rsv6.img
+	$(QEMU) -display curses $(QEMUOPTS)
+
 qemu-nox: rsv6.img
 	$(QEMU) -nographic $(QEMUOPTS)
 
