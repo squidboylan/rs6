@@ -7,6 +7,7 @@ use core::panic::PanicInfo;
 use core::fmt::Write;
 
 mod vga;
+mod serial;
 
 #[panic_handler]
 #[no_mangle]
@@ -18,9 +19,8 @@ pub fn panic(_info: &PanicInfo) -> ! {
 pub extern "C" fn kmain() -> ! {
     // Write "Hello World!" in text to the screen
     {
-        let mut vga_writer = vga::VGA_WRITER.lock();
-        vga_writer.clear_screen();
-        vga_writer.write_str("Hello World!\n").unwrap();
+        let mut writer = serial::SERIAL_WRITER.lock();
+        writer.write_str("Hello World!\n").unwrap();
     }
 
     loop {}
