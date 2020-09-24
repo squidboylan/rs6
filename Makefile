@@ -56,7 +56,7 @@ rsv6.img: bootblock Cargo.toml kernel_bin
 
 kernel_bin: kernel/Cargo.toml kernel/entry.S i386-os.json $(KERNEL_SOURCE_FILES)
 	nasm -f elf32 kernel/entry.S -o entry.o
-	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p kernel
+	RUSTFLAGS="-C opt-level=z" cargo xbuild --release -p kernel
 	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL_LIB) -b binary
 	$(OBJDUMP) -S kernel_bin > kernel_bin.asm
 	$(OBJDUMP) -t kernel_bin | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel_bin.sym
@@ -65,7 +65,7 @@ BOOT_SOURCE_FILES=$(shell find bootloader/src)
 BOOTLOADER_LIB=target/i386-os/release/libbootloader.a
 
 bootblock: bootloader/bootasm.S $(BOOT_SOURCE_FILES)
-	RUSTFLAGS="-C opt-level=z" cargo xbuild --release --target i386-os.json -p bootloader
+	RUSTFLAGS="-C opt-level=z" cargo xbuild --release -p bootloader
 	nasm -f elf32 bootloader/bootasm.S -o bootasm.o
 	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o $(BOOTLOADER_LIB)
 	$(OBJDUMP) -S bootblock.o > bootblock.asm
