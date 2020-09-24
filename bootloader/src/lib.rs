@@ -1,10 +1,11 @@
 #![no_std]
 #![feature(asm)]
+#![feature(llvm_asm)]
 #![feature(link_args)]
 
 use core::panic::PanicInfo;
 use core::*;
-use x86::io::{ inb, outb, insl };
+use x86::io::{ inb, outb };
 
 const ELF_MAGIC: u32 = 0x464C457F;
 
@@ -128,6 +129,12 @@ fn waitdisk() {
 
 fn get_disk_status() -> u8 {
     unsafe { inb(0x1F7) }
+}
+
+unsafe fn insl(port: u16, buf: &mut[u32]) {
+   llvm_asm!("rep insl %dx, (%edi)"
+         :: "{ecx}"(buf.len()), "{dx}"(port), "{edi}"(buf.as_ptr())
+         : "ecx", "edi" : "volatile");
 }
 
 /// Read a single sector from the disk
