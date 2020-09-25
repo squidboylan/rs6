@@ -1,3 +1,4 @@
+#![feature(asm)]
 #![no_std]
 
 #[macro_use]
@@ -6,6 +7,7 @@ extern crate lazy_static;
 use core::panic::PanicInfo;
 use core::fmt::Write;
 
+mod asm;
 mod entry;
 mod vga;
 mod serial;
