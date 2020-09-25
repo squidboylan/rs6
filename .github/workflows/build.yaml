@@ -1,0 +1,24 @@
+on: [push]
+
+name: build
+
+jobs:
+  check:
+    name: build project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Dependencies
+        run: sudo apt install nasm
+
+      - uses: actions/checkout@v2
+      - name: Install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            override: true
+            components: rust-src, rustfmt, clippy
+
+      - name: Install cargo-xbuild
+        run: cargo install cargo-xbuild
+
+      - name: Run build
+        run: make
