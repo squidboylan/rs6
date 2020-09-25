@@ -54,10 +54,9 @@ rsv6.img: bootblock Cargo.toml kernel_bin
 	dd if=bootblock of=rsv6.img conv=notrunc
 	dd if=kernel_bin of=rsv6.img seek=1 conv=notrunc
 
-kernel_bin: kernel/Cargo.toml kernel/entry.S i386-os.json $(KERNEL_SOURCE_FILES)
-	nasm -f elf32 kernel/entry.S -o entry.o
+kernel_bin: kernel/Cargo.toml i386-os.json $(KERNEL_SOURCE_FILES)
 	RUSTFLAGS="-C opt-level=z" cargo xbuild --release -p kernel
-	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL_LIB) -b binary
+	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin $(KERNEL_LIB) -b binary
 	$(OBJDUMP) -S kernel_bin > kernel_bin.asm
 	$(OBJDUMP) -t kernel_bin | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel_bin.sym
 
