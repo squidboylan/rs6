@@ -1,5 +1,6 @@
 use core::fmt::{ Write, Result };
-use x86::io::{ outb, inb };
+
+use asm::{ outb, inb };
 use spin::Mutex;
 
 // COM1 ports
