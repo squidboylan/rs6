@@ -1,7 +1,8 @@
 use core::fmt::{ Write, Result };
+
+use asm::{ outb, inb };
 use spin::Mutex;
 use volatile::Volatile;
-use x86::io::{ outb, inb };
 
 lazy_static! {
     pub static ref VGA_WRITER: Mutex<VGA> = Mutex::new(VGA::new());
