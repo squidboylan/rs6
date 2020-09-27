@@ -21,6 +21,5 @@ RUN apk add --update \
 COPY rust-toolchain /rust-toolchain
 RUN rustup toolchain install $(cat /rust-toolchain)
 RUN rustup component add rust-src
-RUN cargo install cargo-xbuild
 WORKDIR /xv6
 CMD ["/bin/bash"]

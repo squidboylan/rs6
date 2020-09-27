@@ -17,9 +17,6 @@ jobs:
             override: true
             components: rust-src, rustfmt, clippy
 
-      - name: Install cargo-xbuild
-        run: cargo install cargo-xbuild
-
       - name: Run build
         run: make
   container:
