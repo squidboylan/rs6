@@ -4,13 +4,17 @@
 #[macro_use]
 extern crate lazy_static;
 
-use core::panic::PanicInfo;
+#[macro_use]
+extern crate bitfield;
+
 use core::fmt::Write;
+use core::panic::PanicInfo;
 
 mod asm;
 mod entry;
-mod vga;
+mod paging;
 mod serial;
+mod vga;
 
 #[panic_handler]
 #[no_mangle]
