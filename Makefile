@@ -66,9 +66,8 @@ else
 	RUST_TARGET := $(RUST_DBG_TARGET)
 endif
 
-RUST_BUILD_PREFIX := RUSTFLAGS="-C opt-level=z"
-RUST_BOOTLOADER_LIB := $(RUST_TARGET)/libbootloader.a
-RUST_KERNEL_LIB := $(RUST_TARGET)/libkernel.a
+RUST_BOOTLOADER_LIB := bootloader/$(RUST_TARGET)/libbootloader.a
+RUST_KERNEL_LIB := kernel/$(RUST_TARGET)/libkernel.a
 BOOTBLOCK := bootblock
 KERN_ELF := kernel.elf
 RSV6_IMG := rsv6.img
@@ -92,6 +91,7 @@ $(BOOTBLOCK): bootblock.o
 
 bootblock.o: bootasm.o $(RUST_BOOTLOADER_LIB)
 	$(LD) $(LDFLAGS) --gc-sections -N -e start -Ttext 0x7C00 -o $@ $^
+	strip bootblock.o
 
 $(KERN_ELF): $(LDSCRIPT) entry.o $(RUST_KERNEL_LIB)
 	$(LD) $(LDFLAGS) --gc-sections -T $(LDSCRIPT) -o $(KERN_ELF) entry.o $(RUST_KERNEL_LIB) -b binary
@@ -104,21 +104,22 @@ entry.o: kernel/entry.S
 bootasm.o: bootloader/bootasm.S
 	nasm -f elf32 $^ -o $@
 
-BOOTLOADER_SOURCE := $(shell find bootloader)
+BOOTLOADER_SOURCE := $(shell find -path "bootloader/*" \( ! -path "bootloader/target/*" \))
 
 $(RUST_BOOTLOADER_LIB): $(BOOTLOADER_SOURCE)
-	$(RUST_BUILD_PREFIX) cargo build $(RELEASE_FLAG) -p bootloader
+	cd bootloader && cargo build $(RELEASE_FLAG)
 
-KERNEL_SOURCE := $(shell find kernel)
+KERNEL_SOURCE := $(shell find -path "kernel/*" \( ! -path "kernel/target/*" \))
 
 $(RUST_KERNEL_LIB): $(KERNEL_SOURCE)
-	$(RUST_BUILD_PREFIX) cargo build $(RELEASE_FLAG) -p kernel
+	cd kernel && cargo build $(RELEASE_FLAG)
 
 .PRECIOUS: %.o
 
 clean:
 	rm -f *.o *.d *.asm *.sym bootblock entryother $(RSV6_IMG) $(KERN_ELF) .gdbinit
-	cargo clean
+	cd bootloader && cargo clean
+	cd kernel && cargo clean
 
 # try to generate a unique GDB port
 GDBPORT = $(shell expr `id -u` % 5000 + 25000)
