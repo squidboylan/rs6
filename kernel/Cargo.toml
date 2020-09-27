@@ -17,6 +17,7 @@ panic = "abort"
 asm = { path = "../asm" }
 spin = "0.5"
 volatile = "0.3"
+rlibc = "1"
 
 [dependencies.lazy_static]
 version = "1.3"

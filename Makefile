@@ -91,10 +91,10 @@ $(BOOTBLOCK): bootblock.o
 	./sign.sh
 
 bootblock.o: bootasm.o $(RUST_BOOTLOADER_LIB)
-	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o $@ $^
+	$(LD) $(LDFLAGS) --gc-sections -N -e start -Ttext 0x7C00 -o $@ $^
 
 $(KERN_ELF): $(LDSCRIPT) entry.o $(RUST_KERNEL_LIB)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $(KERN_ELF) entry.o $(RUST_KERNEL_LIB) -b binary
+	$(LD) $(LDFLAGS) --gc-sections -T $(LDSCRIPT) -o $(KERN_ELF) entry.o $(RUST_KERNEL_LIB) -b binary
 	$(OBJDUMP) -S $@ > $@.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $@.sym
 
@@ -107,12 +107,12 @@ bootasm.o: bootloader/bootasm.S
 BOOTLOADER_SOURCE := $(shell find bootloader)
 
 $(RUST_BOOTLOADER_LIB): $(BOOTLOADER_SOURCE)
-	$(RUST_BUILD_PREFIX) cargo xbuild $(RELEASE_FLAG) -p bootloader
+	$(RUST_BUILD_PREFIX) cargo build $(RELEASE_FLAG) -p bootloader
 
 KERNEL_SOURCE := $(shell find kernel)
 
 $(RUST_KERNEL_LIB): $(KERNEL_SOURCE)
-	$(RUST_BUILD_PREFIX) cargo xbuild $(RELEASE_FLAG) -p kernel
+	$(RUST_BUILD_PREFIX) cargo build $(RELEASE_FLAG) -p kernel
 
 .PRECIOUS: %.o
 

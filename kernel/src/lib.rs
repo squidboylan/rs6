@@ -2,12 +2,13 @@
 
 #[macro_use]
 extern crate lazy_static;
+extern crate rlibc;
 
-use core::panic::PanicInfo;
 use core::fmt::Write;
+use core::panic::PanicInfo;
 
-mod vga;
 mod serial;
+mod vga;
 
 #[panic_handler]
 #[no_mangle]
