@@ -46,36 +46,78 @@ OBJDUMP = $(TOOLPREFIX)objdump
 # FreeBSD ld wants ``elf_i386_fbsd''
 LDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)
 
-KERNEL_SOURCE_FILES=$(shell find kernel/src)
-KERNEL_LIB=target/i386-os/release/libkernel.a
+RUST_TARGET_PATH := target/i386-os
+RUST_REL_TARGET := $(RUST_TARGET_PATH)/release
+RUST_DBG_TARGET := $(RUST_TARGET_PATH)/debug
 
-rsv6.img: bootblock Cargo.toml kernel_bin
-	dd if=/dev/zero of=rsv6.img count=10000
-	dd if=bootblock of=rsv6.img conv=notrunc
-	dd if=kernel_bin of=rsv6.img seek=1 conv=notrunc
+# To build the Rust code with the 'release' profile, invoke
+# make with RELEASE=1:
+#
+#	$ RELEASE=1 make
+#
+# Otherwise the debug profile is the default
 
-kernel_bin: kernel/Cargo.toml kernel/entry.S i386-os.json $(KERNEL_SOURCE_FILES)
-	nasm -f elf32 kernel/entry.S -o entry.o
-	RUSTFLAGS="-C opt-level=z" cargo xbuild --release -p kernel
-	$(LD) $(LDFLAGS) -T kernel.ld -o kernel_bin entry.o $(KERNEL_LIB) -b binary
-	$(OBJDUMP) -S kernel_bin > kernel_bin.asm
-	$(OBJDUMP) -t kernel_bin | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel_bin.sym
+RELEASE ?= 0
 
-BOOT_SOURCE_FILES=$(shell find bootloader/src)
-BOOTLOADER_LIB=target/i386-os/release/libbootloader.a
+ifeq ($(RELEASE), 1)
+	RUST_TARGET := $(RUST_REL_TARGET)
+	RELEASE_FLAG := --release
+else
+	RUST_TARGET := $(RUST_DBG_TARGET)
+endif
 
-bootblock: bootloader/bootasm.S $(BOOT_SOURCE_FILES)
-	RUSTFLAGS="-C opt-level=z" cargo xbuild --release -p bootloader
-	nasm -f elf32 bootloader/bootasm.S -o bootasm.o
-	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o $(BOOTLOADER_LIB)
-	$(OBJDUMP) -S bootblock.o > bootblock.asm
-	$(OBJCOPY) -S -O binary -j .text bootblock.o bootblock
+RUST_BUILD_PREFIX := RUSTFLAGS="-C opt-level=z"
+RUST_BOOTLOADER_LIB := $(RUST_TARGET)/libbootloader.a
+RUST_KERNEL_LIB := $(RUST_TARGET)/libkernel.a
+BOOTBLOCK := bootblock
+KERN_ELF := kernel.elf
+RSV6_IMG := rsv6.img
+LDSCRIPT := kernel.ld
+
+.PHONY: default build
+
+default: build
+
+build: $(RSV6_IMG)
+
+$(RSV6_IMG): $(BOOTBLOCK) $(KERN_ELF)
+	dd if=/dev/zero of=$@ count=10000
+	dd if=$(BOOTBLOCK) of=$@ conv=notrunc
+	dd if=$(KERN_ELF) of=$@ seek=1 conv=notrunc
+
+$(BOOTBLOCK): bootblock.o
+	$(OBJDUMP) -S $^ > bootblock.asm
+	$(OBJCOPY) -S -O binary -j .text bootblock.o $@
 	./sign.sh
+
+bootblock.o: bootasm.o $(RUST_BOOTLOADER_LIB)
+	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o $@ $^
+
+$(KERN_ELF): $(LDSCRIPT) entry.o $(RUST_KERNEL_LIB)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $(KERN_ELF) entry.o $(RUST_KERNEL_LIB) -b binary
+	$(OBJDUMP) -S $@ > $@.asm
+	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $@.sym
+
+entry.o: kernel/entry.S
+	nasm -f elf32 $^ -o $@
+
+bootasm.o: bootloader/bootasm.S
+	nasm -f elf32 $^ -o $@
+
+BOOTLOADER_SOURCE := $(shell find bootloader)
+
+$(RUST_BOOTLOADER_LIB): $(BOOTLOADER_SOURCE)
+	$(RUST_BUILD_PREFIX) cargo xbuild $(RELEASE_FLAG) -p bootloader
+
+KERNEL_SOURCE := $(shell find kernel)
+
+$(RUST_KERNEL_LIB): $(KERNEL_SOURCE)
+	$(RUST_BUILD_PREFIX) cargo xbuild $(RELEASE_FLAG) -p kernel
 
 .PRECIOUS: %.o
 
 clean:
-	rm -f *.o *.d *.asm *.sym bootblock entryother rsv6.img kernel_bin .gdbinit
+	rm -f *.o *.d *.asm *.sym bootblock entryother $(RSV6_IMG) $(KERN_ELF) .gdbinit
 	cargo clean
 
 # try to generate a unique GDB port
@@ -89,22 +131,22 @@ CPUS := 2
 endif
 QEMUOPTS = -drive file=rsv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 512 $(QEMUEXTRA)
 
-qemu: rsv6.img
+qemu: $(RSV6_IMG)
 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
 
-qemu-curses: rsv6.img
+qemu-curses: $(RSV6_IMG)
 	$(QEMU) -display curses $(QEMUOPTS)
 
-qemu-nox: rsv6.img
+qemu-nox: $(RSV6_IMG)
 	$(QEMU) -nographic $(QEMUOPTS)
 
 .gdbinit: .gdbinit.tmpl
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
-qemu-gdb: rsv6.img .gdbinit
+qemu-gdb: $(RSV6_IMG) .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -serial mon:stdio $(QEMUOPTS) -S $(QEMUGDB)
 
-qemu-nox-gdb: rsv6.img .gdbinit
+qemu-nox-gdb: $(RSV6_IMG) .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -nographic $(QEMUOPTS) -S $(QEMUGDB)
